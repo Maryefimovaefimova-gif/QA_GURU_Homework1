@@ -1,196 +1,83 @@
-from datetime import date
 import re
+import pathlib
+from datetime import datetime
 
+#1Создайте словарь
+def test_create_email_dict():
+ email = {
+  "subject": "Тестовое письмо",
+  "from": "sun@mail.ru",
+  "to": "rep@mail.ru",
+  "body": "Это тело письма.",
+  "date": datetime.now().strftime("%Y-%m-%d") #2Добавьте дату отправки
+ }
 
-# Нормализация email адресов
-def normalize_addresses(value: str) -> str:
-    """
-    Нормализует email адрес: удаляет пробелы и приводит к нижнему регистру.
-    """
-    if not value:
-        return ""
-    # Удаляем пробелы и приводим к нижнему регистру
-    return value.strip().lower()
+#3Нормализуйте e-mail адреса
+ email["from"] = email["from"].strip().lower()
+ email["to"] = email["to"].strip().lower()
 
+#4 Извлеките логин и домен отправителя
+ login = email["from"].split("@")[0]
+ domain = email["from"].split("@")[1]
 
-# Сокращенная версия тела письма
-def add_short_body(email: dict) -> dict:
-    """
-    Добавляет сокращенную версию тела письма (первые 50 символов).
-    """
-    if not email or 'body' not in email:
-        return email
+#5Создайте сокращённую версию текста
+ send_date = email["date"]
+ email["short_body"] = email["body"][:10] + "..."
 
-    body = email.get('body', '')
-    # Берем первые 50 символов, если тело длиннее, добавляем многоточие
-    short_body = body[:50] + ('...' if len(body) > 50 else '')
-    email['short_body'] = short_body
-    return email
+#6Списки доменов
+ personal_domains = list(set(['gmail.com', 'list.ru', 'yahoo.com', 'outlook.com','hotmail.com', 'icloud.com', 'yandex.ru', 'mail.ru','list.ru', 'bk.ru', 'inbox.ru']))
+ corporate_domains = list(set(['company.ru', 'corporation.com', 'university.edu','organization.org', 'company.ru', 'business.net']))
+ personal_set = set(personal_domains)
+ corporate_set = set(corporate_domains)
+ #7Проверьте что в списке личных и корпоративных доменов нет пересечений
+ cross = list(set(personal_domains) & set(corporate_domains))
+ is_cross_empty = not cross
 
+ #8Проверьте «корпоративность» отправителя
+ is_corporate = personal_domains in corporate_domains
 
-# Очистка текста письма
-def clean_body_text(body: str) -> str:
-    """
-    Заменяет табы и переводы строк на пробелы.
-    """
-    if not body:
-        return ""
+ #9Соберите «чистый» текст сообщения
+ clean_body = email["body"].replace("\t", " ").replace("\n", " ")
+ email["clean_body"] = clean_body
 
-    # Заменяем табы и переводы строк на пробелы
-    cleaned = body.replace('\t', ' ').replace('\n', ' ').replace('\r', ' ')
-    # Удаляем множественные пробелы
-    cleaned = re.sub(r'\s+', ' ', cleaned)
-    return cleaned.strip()
+ #10Сформируйте текст отправленного письма
+ sent_text = f"""
+ Кому: {email["to"]}
+ От: {email["from"]}
+ Тема: {email["subject"]}
+ Дата: {email["date"]}
+ {email["clean_body"]}
+ """
+ email["sent_text"] = sent_text
 
+ #11Рассчитайте количество страниц печати
+ pages = round((len(email["sent_text"]) + 499) // 500)
+ email["pages"] = str(pages)
 
-# Формирование итогового текста письма
-def build_sent_text(email: dict) -> str:
-    """
-    Формирует текст письма в формате:
+ #12Проверьте пустоту темы и тела письма
+ is_subject_empty = not email["subject"]
+ is_body_empty = not email["body"]
+ #13Создайте «маску» e-mail отправителя
+ masked_from = login[:2] + '***@' + domain
+ email["masked_from"] = masked_from
+ #14Удалите из списка личных доменов
+ personal_domains_copy = list(set(personal_domains))
+ personal_domains_copy.remove("list.ru")
+ personal_domains_copy.remove("bk.ru")
 
-    Кому: {to}, от {from}
-    Тема: {subject}, дата {date}
-    {clean_body}
-    """
-    sender = email.get('sender', 'неизвестно')
-    recipient = email.get('recipient', 'неизвестно')
-    subject = email.get('subject', 'Без темы')
-    body = email.get('body', '')
-    date_sent = email.get('date', date.today().strftime('%Y-%m-%d'))
+#Для быстрой проверки
 
-    # Очищаем тело письма
-    clean_body = clean_body_text(body)
-
-    # Формируем текст письма
-    result = f"Кому: {recipient}, от {sender}\n"
-    result += f"Тема: {subject}, дата {date_sent}\n"
-    result += clean_body
-
-    return result
-
-
-# Проверка пустоты темы и тела
-def check_empty_fields(subject: str, body: str) -> tuple[bool, bool]:
-    """
-    Возвращает кортеж (is_subject_empty, is_body_empty).
-    True, если поле пустое.
-    """
-    is_subject_empty = not bool(subject and subject.strip())
-    is_body_empty = not bool(body and body.strip())
-    return (is_subject_empty, is_body_empty)
-
-
-# Маска email отправителя
-def mask_sender_email(login: str, domain: str) -> str:
-    """
-    Возвращает маску email: первые 2 символа логина + "***@" + домен.
-    """
-    if not login:
-        return f"***@{domain}" if domain else ""
-
-    # Если логин короче 2 символов, маскируем полностью
-    if len(login) <= 2:
-        masked_login = login[0] + '*' if len(login) == 2 else '*'
-    else:
-        masked_login = login[:2] + "***"
-
-    return f"{masked_login}@{domain}"
-
-
-# Получение корректных email
-def get_correct_email(email_list: list[str]) -> list[str]:
-    """
-    Возвращает список корректных email.
-    """
-    if not email_list:
-        return []
-
-    # Простой паттерн для проверки email
-    email_pattern = re.compile(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$')
-    correct_emails = []
-
-    for email in email_list:
-        if email and isinstance(email, str):
-            normalized = normalize_addresses(email)
-            if email_pattern.match(normalized):
-                correct_emails.append(normalized)
-
-    return correct_emails
-
-
-# Создание словаря письма
-def create_email(sender: str, recipient: str, subject: str, body: str) -> dict:
-    """
-    Создает словарь email с базовыми полями:
-    'sender', 'recipient', 'subject', 'body'
-    """
-    # Нормализуем email адреса
-    sender_normalized = normalize_addresses(sender)
-    recipient_normalized = normalize_addresses(recipient)
-
-    return {
-        'sender': sender_normalized,
-        'recipient': recipient_normalized,
-        'subject': subject or 'Без темы',
-        'body': body or ''
-    }
-
-
-# Добавление даты отправки
-def add_send_date(email: dict) -> dict:
-    """
-    Возвращает email с добавленным ключом email["date"] — текущая дата в формате YYYY-MM-DD.
-    """
-    if not email:
-        return email
-
-    current_date = date.today().strftime('%Y-%m-%d')
-    email['date'] = current_date
-    return email
-
-
-# Получение логина и домена
-def extract_login_domain(address: str) -> tuple[str, str]:
-    """
-    Возвращает логин и домен отправителя.
-    Пример: "user@mail.ru" -> ("user", "mail.ru")
-    """
-    if not address or '@' not in address:
-        return ("", "")
-
-    parts = address.split('@', 1)
-    return (parts[0], parts[1])
-# Создаем письмо
-email = create_email(
-    sender="user@mail.ru",
-    recipient="friend@gmail.com",
-    subject="Привет!",
-    body="Это тестовое письмо.\nС новой строки.\tС табуляцией."
-)
-
-# Добавляем дату
-email = add_send_date(email)
-
-# Добавляем сокращенную версию
-email = add_short_body(email)
-
-# Получаем логин и домен
-login, domain = extract_login_domain(email['sender'])
-print(f"Логин: {login}, Домен: {domain}")
-
-# Маскируем email
-masked = mask_sender_email(login, domain)
-print(f"Маскированный email: {masked}")
-
-# Формируем текст письма
-text = build_sent_text(email)
-print(text)
-
-# Проверяем поля
-is_subject_empty, is_body_empty = check_empty_fields(email['subject'], email['body'])
-print(f"Тема пуста: {is_subject_empty}, Тело пусто: {is_body_empty}")
-
-# Проверка корректных email
-emails = ["user@mail.ru", "invalid-email", "test@gmail.com", "another@test"]
-correct = get_correct_email(emails)
-print(f"Корректные email: {correct}")
+#print("Задание 1:", email)
+#print("Задание 2:", email["date"])
+#print("Задание 3:", email["from"], email["to"])
+#print("Задание 4:", login, domain)
+#print("Задание 5:", email["short_body"])
+#print("Задание 6:", personal_domains,"\n", corporate_domains)
+#print("Задание 7:", is_cross_empty)
+#print("Задание 8:", is_corporate)
+#print("Задание 9:", email["clean_body"])
+#print("Задание 10:", email["sent_text"])
+#print("Задание 11:", email["pages"])
+#print("Задание 12:", is_subject_empty, is_body_empty)
+#print("Задание 13:", email["masked_from"])
+#print("Задание 14:", personal_domains_copy)
